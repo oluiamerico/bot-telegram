@@ -58,7 +58,7 @@ def control_flow(message):
         
         bot.send_chat_action(chat_id, 'upload_video')
         try:
-            with open('media/1.webm', 'rb') as video:
+            with open('media/1.mp4', 'rb') as video:
                 bot.send_video(chat_id, video, caption="Pra você gatinho, espero que goste 🥰")
         except: pass
 
