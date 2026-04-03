@@ -17,6 +17,7 @@ ALPHAPAY_TOKEN = os.getenv('ALPHAPAY_TOKEN')
 PRODUCT_HASH = os.getenv('PRODUCT_HASH')
 OFFER_HASH = os.getenv('OFFER_HASH')
 GROUP_LINK = os.getenv('GROUP_LINK')
+GROUP_ID = os.getenv('GROUP_ID')
 
 user_steps = {}
 user_data = {} # Armazena dados temporários (Nome, CPF, Email)
@@ -96,7 +97,17 @@ def alphapay_webhook():
             chat_id = int(chat_id)
             bot.send_message(chat_id, "✅ Pagemento confirmado, meu amor! ❤️")
             time.sleep(2)
-            bot.send_message(chat_id, f"Aqui está o link do seu acesso vitalício: {GROUP_LINK}")
+            
+            link_to_send = GROUP_LINK
+            if GROUP_ID:
+                try:
+                    # Gera um link único que expira após 1 uso
+                    invite = bot.create_chat_invite_link(chat_id=GROUP_ID, member_limit=1)
+                    link_to_send = invite.invite_link
+                except Exception as e:
+                    print(f"DEBUG: Erro ao gerar link único: {e}")
+
+            bot.send_message(chat_id, f"Aqui está o link do seu acesso vitalício: {link_to_send}")
             bot.send_message(chat_id, "Seja muito bem-vindo(a) ao meu mundinho VIP! 😈🔥")
             user_steps[chat_id] = 0
             
@@ -118,11 +129,11 @@ def start(message):
     
     bot.send_chat_action(chat_id, 'typing')
     time.sleep(6)
-    bot.send_message(chat_id, "Me chamo Alessandra, tenho 19 aninhos... prazer 😉")
+    bot.send_message(chat_id, "Me chamo Sofia, tenho 24 aninhos... prazer 😉")
     
     bot.send_chat_action(chat_id, 'typing')
     time.sleep(4)
-    bot.send_message(chat_id, "Posso falar dos meus conteúdos e das chamadas? 😈🔥")
+    bot.send_message(chat_id, "Posso falar dos meus conteúdos? 😈🔥")
 
 @bot.message_handler(func=lambda message: True)
 def control_flow(message):
@@ -238,7 +249,7 @@ def control_flow(message):
             # Print do Canal
             bot.send_chat_action(chat_id, 'upload_photo')
             try:
-                with open('media/grupo.jpg', 'rb') as photo:
+                with open('media/grupo.png', 'rb') as photo:
                     bot.send_photo(chat_id, photo, caption="Esse é o grupo que vou te colocar bb.... tem varios video la dentro... e todo dia posto video novo. Então o grupo existe sim amor")
             except: pass
 
