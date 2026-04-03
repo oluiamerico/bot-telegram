@@ -45,7 +45,7 @@ def create_alphapay_transaction(chat_id):
         "postback_url": os.getenv('POSTBACK_URL')
     }
     
-    url = f"https://api.alphapaybrasil.com.br/v1/transactions?api_token={ALPHAPAY_TOKEN}"
+    url = f"https://api.alphapaybrasil.com.br/api/public/v1/transactions?api_token={ALPHAPAY_TOKEN}"
     print(f"DEBUG: Enviando requisição AlphaPay...")
     print(f"DEBUG: Payload: {payload}")
     try:
