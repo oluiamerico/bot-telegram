@@ -228,21 +228,29 @@ def control_flow(message):
             bot.send_message(chat_id, "Gerando seu PIX... um segundinho... ⏳")
             
             res = create_alphapay_transaction(chat_id)
-            if res and res.get('success'):
-                data = res.get('data', {})
-                pix_code = data.get('pix_code')
-                tx_hash = data.get('hash')
+            # A API pode retornar o objeto direto ou dentro de um campo 'data'
+            if res and (res.get('success') or 'pix' in res or 'data' in res):
+                # Tenta pegar das duas formas (objeto direto ou dentro de 'data')
+                pix_data = res.get('pix', {})
+                data_field = res.get('data', {})
                 
-                transaction_mapping[tx_hash] = chat_id
+                pix_code = pix_data.get('pix_qr_code') or data_field.get('pix_code')
+                tx_hash = res.get('hash') or data_field.get('hash')
                 
-                bot.send_message(chat_id, "✅ Prontinho amor, gerei a chave pix!\n\n- Copie a Chave Pix \"copia e cola\" abaixo para realizar o pagamento ⤵️")
-                time.sleep(2)
-                bot.send_message(chat_id, f"`{pix_code}`", parse_mode="Markdown")
-                
-                time.sleep(4)
-                bot.send_message(chat_id, "O acesso ao meu grupo vip com minhas fotos e videos são R$19,90 ta anjo?")
-                time.sleep(4)
-                bot.send_message(chat_id, "Assim que você pagar, eu te mando o link do grupo aqui na mesma hora! 🥰🥰❤️")
+                if pix_code:
+                    transaction_mapping[tx_hash] = chat_id
+                    
+                    bot.send_message(chat_id, "✅ Prontinho amor, gerei a chave pix!\n\n- Copie a Chave Pix \"copia e cola\" abaixo para realizar o pagamento ⤵️")
+                    time.sleep(2)
+                    bot.send_message(chat_id, f"`{pix_code}`", parse_mode="Markdown")
+                    
+                    time.sleep(4)
+                    bot.send_message(chat_id, "O acesso ao meu grupo vip com minhas fotos e videos são R$19,90 ta anjo?")
+                    time.sleep(4)
+                    bot.send_message(chat_id, "Assim que você pagar, eu te mando o link do grupo aqui na mesma hora! 🥰🥰❤️")
+                else:
+                    bot.send_message(chat_id, "Tive um probleminha ao gerar o código PIX 😔. Pode tentar novamente?")
+                    user_steps[chat_id] = 5
             else:
                 bot.send_message(chat_id, "Tive um probleminha ao gerar o PIX 😔. Pode tentar novamente em alguns minutos?")
                 user_steps[chat_id] = 5
