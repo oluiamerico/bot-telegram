@@ -3,6 +3,7 @@ import time
 import os
 import requests
 import threading
+import json
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
@@ -21,6 +22,21 @@ user_steps = {}
 user_data = {} # Armazena dados temporários (Nome, CPF, Email)
 transaction_mapping = {} # Mapeia hash da transação para chat_id
 processing_users = set() # Controle para evitar mensagens duplicadas
+
+DATA_FILE = "transactions.json"
+
+def save_transactions():
+    with open(DATA_FILE, 'w') as f:
+        json.dump(transaction_mapping, f)
+
+def load_transactions():
+    global transaction_mapping
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, 'r') as f:
+                transaction_mapping = json.load(f)
+        except:
+            transaction_mapping = {}
 
 # --- INTEGRAÇÃO ALPHAPAY ---
 def create_alphapay_transaction(chat_id):
@@ -69,12 +85,15 @@ app = Flask(__name__)
 @app.route('/webhook/alphapay', methods=['POST'])
 def alphapay_webhook():
     content = request.json
-    print(f"DEBUG: Webhook recebido: {content}")
+    print(f"DEBUG: Webhook recebido: {json.dumps(content)}")
+    
     if content and content.get('status') == 'paid':
-        tx_hash = content.get('transaction_hash')
-        chat_id = transaction_mapping.get(tx_hash)
+        # Tenta pegar por 'transaction_hash' ou 'hash' ou 'transaction'
+        tx_hash = content.get('transaction_hash') or content.get('hash') or content.get('transaction')
+        chat_id = transaction_mapping.get(str(tx_hash))
         
         if chat_id:
+            chat_id = int(chat_id)
             bot.send_message(chat_id, "✅ Pagemento confirmado, meu amor! ❤️")
             time.sleep(2)
             bot.send_message(chat_id, f"Aqui está o link do seu acesso vitalício: {GROUP_LINK}")
@@ -180,6 +199,7 @@ def control_flow(message):
             try:
                 with open('media/2.ogg', 'rb') as v:
                     bot.send_voice(chat_id, v)
+                time.sleep(1)
             except: pass
 
             bot.send_chat_action(chat_id, 'typing')
@@ -238,7 +258,8 @@ def control_flow(message):
                 tx_hash = res.get('hash') or data_field.get('hash')
                 
                 if pix_code:
-                    transaction_mapping[tx_hash] = chat_id
+                    transaction_mapping[str(tx_hash)] = chat_id
+                    save_transactions()
                     
                     bot.send_message(chat_id, "✅ Prontinho amor, gerei a chave pix!\n\n- Copie a Chave Pix \"copia e cola\" abaixo para realizar o pagamento ⤵️")
                     time.sleep(2)
@@ -262,10 +283,12 @@ def control_flow(message):
     except Exception as e:
         print(f"DEBUG: Erro no control_flow: {e}")
     finally:
-        processing_users.remove(chat_id)
+        if chat_id in processing_users:
+            processing_users.remove(chat_id)
 
 if __name__ == "__main__":
     print("Alessandra online e convertendo...")
+    load_transactions()
     
     # Limpa qualquer webhook anterior para evitar o erro 409 Conflict
     try:
