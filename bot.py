@@ -1,11 +1,82 @@
 import telebot
 import time
 import os
+import requests
+import threading
+from flask import Flask, request, jsonify
+from dotenv import load_dotenv
+
+load_dotenv()
 
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
+# Configurações AlphaPay
+ALPHAPAY_TOKEN = os.getenv('ALPHAPAY_TOKEN')
+PRODUCT_HASH = os.getenv('PRODUCT_HASH')
+OFFER_HASH = os.getenv('OFFER_HASH')
+GROUP_LINK = os.getenv('GROUP_LINK')
+
 user_steps = {}
+user_data = {} # Armazena dados temporários (Nome, CPF, Email)
+transaction_mapping = {} # Mapeia hash da transação para chat_id
+
+# --- INTEGRAÇÃO ALPHAPAY ---
+def create_alphapay_transaction(chat_id):
+    data = user_data.get(chat_id, {})
+    payload = {
+        "amount": 1990, # R$ 19,90 em centavos
+        "offer_hash": OFFER_HASH,
+        "payment_method": "pix",
+        "customer": {
+            "name": data.get('name', 'Cliente Telegram'),
+            "email": data.get('email', 'cliente@email.com'),
+            "phone_number": data.get('phone', '11999999999'),
+            "document": data.get('cpf', '00000000000')
+        },
+        "cart": [{
+            "product_hash": PRODUCT_HASH,
+            "title": "Grupo VIP + Punhetinha Guiada",
+            "price": 1990,
+            "quantity": 1,
+            "operation_type": 1,
+            "tangible": False
+        }],
+        "transaction_origin": "api",
+        "postback_url": os.getenv('POSTBACK_URL')
+    }
+    
+    url = f"https://api.alphapaybrasil.com.br/v1/transactions?api_token={ALPHAPAY_TOKEN}"
+    try:
+        response = requests.post(url, json=payload)
+        return response.json()
+    except Exception as e:
+        print(f"Erro AlphaPay: {e}")
+        return None
+
+# --- WEBHOOK SERVER (FLASK) ---
+app = Flask(__name__)
+
+@app.route('/webhook/alphapay', methods=['POST'])
+def alphapay_webhook():
+    content = request.json
+    if content and content.get('status') == 'paid':
+        tx_hash = content.get('transaction_hash')
+        chat_id = transaction_mapping.get(tx_hash)
+        
+        if chat_id:
+            bot.send_message(chat_id, "✅ Pagemento confirmado, meu amor! ❤️")
+            time.sleep(2)
+            bot.send_message(chat_id, f"Aqui está o link do seu acesso vitalício: {GROUP_LINK}")
+            bot.send_message(chat_id, "Seja muito bem-vindo(a) ao meu mundinho VIP! 😈🔥")
+            user_steps[chat_id] = 0
+            
+    return jsonify({"status": "ok"}), 200
+
+def run_flask():
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
+# --- BOT LOGIC ---
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -115,7 +186,7 @@ def control_flow(message):
         bot.send_message(chat_id, "Vai querer gatinho? 🔥")
         user_steps[chat_id] = 5
 
-    # PASSO 5 -> FINAL (Geração do Pix com Print do Canal)
+    # PASSO 5 -> SOLICITAÇÃO DE DADOS (Informa que vai gerar e pede Nome)
     elif step == 5:
         # Áudio Final
         bot.send_chat_action(chat_id, 'record_voice')
@@ -134,20 +205,69 @@ def control_flow(message):
 
         time.sleep(2)
         bot.send_message(chat_id, "Vou gerar minha chave pix pra você bb 😘🔥")
-        
-        bot.send_chat_action(chat_id, 'typing')
-        time.sleep(7)
-        bot.send_message(chat_id, "✅ Prontinho amor, gerei a chave pix!\n\n- Copie a Chave Pix \"copia e cola\" abaixo para realizar o pagamento ⤵️")
-        time.sleep(6)
-        # Sua chave PIX real (substituída pela da imagem)
-        bot.send_message(chat_id, "00020101021226810014br.gov.bcb.pix2559qr.woovi.com/qr/v2/cob/6454384b-36d9-48e8-861b-36276c5ea40e520400005303986540519.905802BR5909PUSHINPAY6011HORTOLANDIA62290525f24d170d57724805ada1ae08c6304D647")
-        time.sleep(5)
-        bot.send_message(chat_id, "O acesso ao meu grupo vip com minhas fotos e videos são R$19,90 ta anjo?")
-        time.sleep(5)
-        bot.send_message(chat_id, "vou te mandar o link do grupo assim que realizar o pagamento 🥰🥰❤️")
-        time.sleep(5)
-        bot.send_message(chat_id, "Você só paga uma vez e tem acesso vitalício ❤️")
-        user_steps[chat_id] = 0
+        time.sleep(2)
+        bot.send_message(chat_id, "Mas antes, a plataforma de pagamento pede uns dados rapidinho para emitir o seu PIX seguro.")
+        bot.send_message(chat_id, "Qual seu **Nome Completo**? ☺️")
+        user_steps[chat_id] = 6
+        user_data[chat_id] = {}
 
-print("Alessandra online e convertendo...")
-bot.polling(non_stop=True)
+    # PASSO 6 -> PEDE CPF
+    elif step == 6:
+        user_data[chat_id]['name'] = message.text
+        bot.send_message(chat_id, "E o seu **CPF** (apenas números)? Prometo que é só para o pagamento ❤️")
+        user_steps[chat_id] = 7
+
+    # PASSO 7 -> PEDE EMAIL
+    elif step == 7:
+        cpf = ''.join(filter(str.isdigit, message.text))
+        if len(cpf) != 11:
+            bot.send_message(chat_id, "CPF inválido, anjo. Manda de novo só os números? 😅")
+            return
+        user_data[chat_id]['cpf'] = cpf
+        bot.send_message(chat_id, "Por último, qual seu melhor **E-mail**? É lá que você recebe o comprovante também 🥰")
+        user_steps[chat_id] = 8
+
+    # PASSO 8 -> GERA PIX
+    elif step == 8:
+        user_data[chat_id]['email'] = message.text
+        bot.send_message(chat_id, "Gerando seu PIX... um segundinho... ⏳")
+        
+        res = create_alphapay_transaction(chat_id)
+        if res and res.get('success'):
+            data = res.get('data', {})
+            pix_code = data.get('pix_code')
+            qr_code_base64 = data.get('qr_code')
+            tx_hash = data.get('hash')
+            
+            # Mapear para o webhook
+            transaction_mapping[tx_hash] = chat_id
+            
+            bot.send_message(chat_id, "✅ Prontinho amor, gerei a chave pix!\n\n- Copie a Chave Pix \"copia e cola\" abaixo para realizar o pagamento ⤵️")
+            time.sleep(2)
+            bot.send_message(chat_id, f"`{pix_code}`", parse_mode="Markdown")
+            
+            # Opcional: Mandar QR Code se for Base64 (precisa decodificar)
+            # Por enquanto vamos focar no Código Copia e Cola que é o mais usado.
+            
+            time.sleep(4)
+            bot.send_message(chat_id, "O acesso ao meu grupo vip com minhas fotos e videos são R$19,90 ta anjo?")
+            time.sleep(4)
+            bot.send_message(chat_id, "Assim que você pagar, eu te mando o link do grupo aqui na mesma hora! 🥰🥰❤️")
+            user_steps[chat_id] = 9 # Aguardando pagamento
+        else:
+            bot.send_message(chat_id, "Tive um probleminha ao gerar o PIX 😔. Pode tentar novamente em alguns minutos?")
+            user_steps[chat_id] = 5
+
+    # PASSO 9 -> LEMBRETE DE PAGAMENTO
+    elif step == 9:
+        bot.send_message(chat_id, "Ainda estou aguardando o seu pagamento, anjo... o link já está prontinho aqui te esperando! 🥰")
+
+if __name__ == "__main__":
+    print("Alessandra online e convertendo...")
+    # Inicia o Flask em uma thread separada para ouvir o Webhook
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+    
+    # Inicia o polling do Bot
+    bot.polling(non_stop=True)
