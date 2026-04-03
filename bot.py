@@ -46,11 +46,15 @@ def create_alphapay_transaction(chat_id):
     }
     
     url = f"https://api.alphapaybrasil.com.br/v1/transactions?api_token={ALPHAPAY_TOKEN}"
+    print(f"DEBUG: Enviando requisição AlphaPay...")
+    print(f"DEBUG: Payload: {payload}")
     try:
         response = requests.post(url, json=payload)
+        print(f"DEBUG: Status Resposta: {response.status_code}")
+        print(f"DEBUG: Dados Resposta: {response.text}")
         return response.json()
     except Exception as e:
-        print(f"Erro AlphaPay: {e}")
+        print(f"DEBUG: Erro AlphaPay: {e}")
         return None
 
 # --- WEBHOOK SERVER (FLASK) ---
@@ -59,6 +63,7 @@ app = Flask(__name__)
 @app.route('/webhook/alphapay', methods=['POST'])
 def alphapay_webhook():
     content = request.json
+    print(f"DEBUG: Webhook recebido: {content}")
     if content and content.get('status') == 'paid':
         tx_hash = content.get('transaction_hash')
         chat_id = transaction_mapping.get(tx_hash)
@@ -99,6 +104,7 @@ def control_flow(message):
     chat_id = message.chat.id
     if message.text == "/start": return
     step = user_steps.get(chat_id, 0)
+    print(f"DEBUG: Mensagem de {chat_id}: '{message.text}' (Passo atual: {step})")
 
     # PASSO 1 -> PASSO 2 (Início do convite)
     if step == 1:
