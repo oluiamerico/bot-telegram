@@ -23,16 +23,15 @@ transaction_mapping = {} # Mapeia hash da transação para chat_id
 
 # --- INTEGRAÇÃO ALPHAPAY ---
 def create_alphapay_transaction(chat_id):
-    data = user_data.get(chat_id, {})
     payload = {
         "amount": 1990, # R$ 19,90 em centavos
         "offer_hash": OFFER_HASH,
         "payment_method": "pix",
         "customer": {
-            "name": data.get('name', 'Cliente Telegram'),
-            "email": data.get('email', 'cliente@email.com'),
-            "phone_number": data.get('phone', '11999999999'),
-            "document": data.get('cpf', '00000000000')
+            "name": "Cliente Telegram",
+            "email": "cliente@gmail.com",
+            "phone_number": "11989283928",
+            "document": "26208784620"
         },
         "cart": [{
             "product_hash": PRODUCT_HASH,
@@ -186,7 +185,7 @@ def control_flow(message):
         bot.send_message(chat_id, "Vai querer gatinho? 🔥")
         user_steps[chat_id] = 5
 
-    # PASSO 5 -> SOLICITAÇÃO DE DADOS (Informa que vai gerar e pede Nome)
+    # PASSO 5 -> GERAÇÃO DIRETA DE PIX (Com dados fixos)
     elif step == 5:
         # Áudio Final
         bot.send_chat_action(chat_id, 'record_voice')
@@ -206,48 +205,19 @@ def control_flow(message):
         time.sleep(2)
         bot.send_message(chat_id, "Vou gerar minha chave pix pra você bb 😘🔥")
         time.sleep(2)
-        bot.send_message(chat_id, "Mas antes, a plataforma de pagamento pede uns dados rapidinho para emitir o seu PIX seguro.")
-        bot.send_message(chat_id, "Qual seu **Nome Completo**? ☺️")
-        user_steps[chat_id] = 6
-        user_data[chat_id] = {}
-
-    # PASSO 6 -> PEDE CPF
-    elif step == 6:
-        user_data[chat_id]['name'] = message.text
-        bot.send_message(chat_id, "E o seu **CPF** (apenas números)? Prometo que é só para o pagamento ❤️")
-        user_steps[chat_id] = 7
-
-    # PASSO 7 -> PEDE EMAIL
-    elif step == 7:
-        cpf = ''.join(filter(str.isdigit, message.text))
-        if len(cpf) != 11:
-            bot.send_message(chat_id, "CPF inválido, anjo. Manda de novo só os números? 😅")
-            return
-        user_data[chat_id]['cpf'] = cpf
-        bot.send_message(chat_id, "Por último, qual seu melhor **E-mail**? É lá que você recebe o comprovante também 🥰")
-        user_steps[chat_id] = 8
-
-    # PASSO 8 -> GERA PIX
-    elif step == 8:
-        user_data[chat_id]['email'] = message.text
         bot.send_message(chat_id, "Gerando seu PIX... um segundinho... ⏳")
         
         res = create_alphapay_transaction(chat_id)
         if res and res.get('success'):
             data = res.get('data', {})
             pix_code = data.get('pix_code')
-            qr_code_base64 = data.get('qr_code')
             tx_hash = data.get('hash')
             
-            # Mapear para o webhook
             transaction_mapping[tx_hash] = chat_id
             
             bot.send_message(chat_id, "✅ Prontinho amor, gerei a chave pix!\n\n- Copie a Chave Pix \"copia e cola\" abaixo para realizar o pagamento ⤵️")
             time.sleep(2)
             bot.send_message(chat_id, f"`{pix_code}`", parse_mode="Markdown")
-            
-            # Opcional: Mandar QR Code se for Base64 (precisa decodificar)
-            # Por enquanto vamos focar no Código Copia e Cola que é o mais usado.
             
             time.sleep(4)
             bot.send_message(chat_id, "O acesso ao meu grupo vip com minhas fotos e videos são R$19,90 ta anjo?")
