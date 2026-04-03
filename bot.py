@@ -234,6 +234,14 @@ def control_flow(message):
 
 if __name__ == "__main__":
     print("Alessandra online e convertendo...")
+    
+    # Limpa qualquer webhook anterior para evitar o erro 409 Conflict
+    try:
+        bot.remove_webhook()
+        time.sleep(1)
+    except:
+        pass
+
     # Inicia o Flask em uma thread separada para ouvir o Webhook
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
