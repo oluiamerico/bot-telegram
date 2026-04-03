@@ -1,8 +1,9 @@
 import telebot
 import time
+import os
 
 # Substitua pelo seu Token do @BotFather
-TOKEN = '8696967580:AAH25QeL3C3WLXxalYOePzhtvsxytaVEdN8'
+TOKEN = os.getenv('TELEGRAM_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
 # Dicionário na memória para controlar o fluxo
