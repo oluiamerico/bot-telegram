@@ -78,7 +78,7 @@ def create_alphapay_transaction(chat_id):
         },
         "cart": [{
             "product_hash": PRODUCT_HASH,
-            "title": "Grupo VIP + Punhetinha Guiada",
+            "title": "Grupo VIP",
             "price": 1990,
             "quantity": 1,
             "operation_type": 1,
