@@ -58,42 +58,48 @@ def load_data():
         except: leads_data = {}
 
 # ==========================================
-# 💳 INTEGRAÇÃO COM GATEWAY ALPHAPAY
+# 💳 INTEGRAÇÃO COM GATEWAY PAYNUX
 # ==========================================
-def create_alphapay_transaction(chat_id):
-    """Faz a chamada para a API da AlphaPay para gerar o PIX."""
-    postback_url = os.getenv('POSTBACK_URL')
-    if not postback_url or postback_url == "None":
-        postback_url = "https://google.com/webhook-placeholder"
-
+def create_paynux_transaction(chat_id):
+    """Faz a chamada para a API da Paynux para gerar o PIX."""
+    auth_header = "Basic cGF5bnV4X2xpdmVfbTNSazJ1bHQ5Y2E3YXFlcnpKR1NTTkoxSlVxR0xXZDg6c2tfbGl2ZV80ZlY4ZzlSaW41TlZ3MjZROXFwWkdPRWViV2JpalFEeQ=="
+    
     payload = {
-        "amount": 1990, # Valor fixo: R$ 19,90
-        "offer_hash": OFFER_HASH,
         "payment_method": "pix",
         "customer": {
+            "document": {
+                "type": "cpf",
+                "number": "26208784620"
+            },
             "name": "Cliente Telegram",
             "email": "cliente@gmail.com",
-            "phone_number": "11989283928",
-            "document": "26208784620"
+            "phone": "11989283928"
         },
-        "cart": [{
-            "product_hash": PRODUCT_HASH,
-            "title": "Grupo VIP",
-            "price": 1990,
-            "quantity": 1,
-            "operation_type": 1,
-            "tangible": False
-        }],
-        "transaction_origin": "api",
-        "postback_url": postback_url
+        "amount": 1990,
+        "items": [
+            {
+                "title": "Grupo VIP",
+                "unit_price": 1990,
+                "quantity": 1
+            }
+        ],
+        "metadata": {
+            "chat_id": str(chat_id)
+        }
     }
     
-    url = f"https://api.alphapaybrasil.com.br/api/public/v1/transactions?api_token={ALPHAPAY_TOKEN}"
+    headers = {
+        "accept": "application/json",
+        "authorization": auth_header,
+        "content-type": "application/json"
+    }
+    
+    url = "https://api.paynuxpayments.com/v1/payment-transaction/create"
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, headers=headers)
         return response.json()
     except Exception as e:
-        print(f"DEBUG Error AlphaPay: {e}")
+        print(f"DEBUG Error Paynux: {e}")
         return None
 
 # ==========================================
@@ -146,18 +152,24 @@ def reminder_worker():
 # ==========================================
 app = Flask(__name__)
 
-@app.route('/webhook/alphapay', methods=['POST'])
-def alphapay_webhook():
-    """Recebe as notificações de pagamento da AlphaPay."""
+@app.route('/webhook/paynux', methods=['POST'])
+def paynux_webhook():
+    """Recebe as notificações de pagamento da Paynux."""
     content = request.json
     print(f"DEBUG: Webhook recebido: {json.dumps(content)}")
     
-    if content and content.get('status') == 'paid':
-        tx_hash = content.get('transaction_hash') or content.get('hash') or content.get('transaction')
-        chat_id = transaction_mapping.get(str(tx_hash))
-        
-        if chat_id:
-            user_id_str = str(chat_id)
+    if content:
+        status_value = (content.get('status') or content.get('STATUS') or content.get('payment_status') or '').upper()
+        if status_value in ['PAID', 'APPROVED', 'COMPLETED', 'SUCCESS']:
+            tx_hash = content.get('id') or content.get('transaction_id')
+            chat_id = transaction_mapping.get(str(tx_hash))
+            
+            # Se não encontrou pelo mapping de ID, tenta pegar da metadata se estiver lá
+            if not chat_id and content.get('metadata') and content['metadata'].get('chat_id'):
+                chat_id = content['metadata'].get('chat_id')
+                
+            if chat_id:
+                user_id_str = str(chat_id)
             if user_id_str in leads_data:
                 del leads_data[user_id_str]
                 save_data()
@@ -331,12 +343,12 @@ def control_flow(message):
             time.sleep(9)
             bot.send_message(chat_id, "Gerando seu PIX... um segundinho... ⏳")
             
-            res = create_alphapay_transaction(chat_id)
-            if res and (res.get('success') or 'pix' in res or 'data' in res):
-                pix_data = res.get('pix', {})
+            res = create_paynux_transaction(chat_id)
+            if res and res.get('success'):
                 data_field = res.get('data', {})
-                pix_code = pix_data.get('pix_qr_code') or data_field.get('pix_code')
-                tx_hash = res.get('hash') or data_field.get('hash')
+                pix_data = data_field.get('pix', {})
+                pix_code = pix_data.get('qr_code')
+                tx_hash = data_field.get('id')
                 
                 if pix_code:
                     transaction_mapping[str(tx_hash)] = chat_id
